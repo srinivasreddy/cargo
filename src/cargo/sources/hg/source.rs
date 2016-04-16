@@ -5,39 +5,37 @@ use std::mem;
 use url::{self, Url};
 
 use core::source::{Source, SourceId};
-use core::GitReference;
+use core::HgReference;
 use core::{Package, PackageId, Summary, Registry, Dependency};
 use util::{CargoResult, Config, FileLock, to_hex};
 use sources::PathSource;
-use sources::git::utils::{GitRemote, GitRevision};
+use sources::hg::utils::{HgRemote, HgRevision};
 
-/* TODO: Refactor GitSource to delegate to a PathSource
- */
-pub struct GitSource<'cfg> {
-    remote: GitRemote,
-    reference: GitReference,
+pub struct HgSource<'cfg> {
+    remote: HgRemote,
+    reference: HgReference,
     source_id: SourceId,
     path_source: Option<PathSource<'cfg>>,
-    rev: Option<GitRevision>,
+    rev: Option<HgRevision>,
     checkout_lock: Option<FileLock>,
     ident: String,
     config: &'cfg Config,
 }
 
-impl<'cfg> GitSource<'cfg> {
+impl<'cfg> HgSource<'cfg> {
     pub fn new(source_id: &SourceId,
-               config: &'cfg Config) -> GitSource<'cfg> {
-        assert!(source_id.is_git(), "id is not git, id={}", source_id);
+               config: &'cfg Config) -> HgSource<'cfg> {
+        assert!(source_id.is_hg(), "id is not mercurial, id={}", source_id);
 
-        let remote = GitRemote::new(source_id.url());
+        let remote = HgRemote::new(source_id.url());
         let ident = ident(source_id.url());
 
         let reference = match source_id.precise() {
-            Some(s) => GitReference::Rev(s.to_string()),
-            None => source_id.git_reference().unwrap().clone(),
+            Some(s) => HgReference::Rev(s.to_string()),
+            None => source_id.hg_reference().unwrap().clone(),
         };
 
-        GitSource {
+        HgSource {
             remote: remote,
             reference: reference,
             source_id: source_id.clone(),
@@ -122,7 +120,7 @@ pub fn canonicalize_url(url: &Url) -> Url {
     url
 }
 
-impl<'cfg> Debug for GitSource<'cfg> {
+impl<'cfg> Debug for HgSource<'cfg> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         try!(write!(f, "git repo at {}", self.remote.url()));
 
@@ -133,7 +131,7 @@ impl<'cfg> Debug for GitSource<'cfg> {
     }
 }
 
-impl<'cfg> Registry for GitSource<'cfg> {
+impl<'cfg> Registry for HgSource<'cfg> {
     fn query(&mut self, dep: &Dependency) -> CargoResult<Vec<Summary>> {
         let src = self.path_source.as_mut()
                       .expect("BUG: update() must be called before query()");
@@ -141,7 +139,7 @@ impl<'cfg> Registry for GitSource<'cfg> {
     }
 }
 
-impl<'cfg> Source for GitSource<'cfg> {
+impl<'cfg> Source for HgSource<'cfg> {
     fn update(&mut self) -> CargoResult<()> {
         // First, lock both the global database and checkout locations that
         // we're going to use. We may be performing a fetch into these locations
@@ -156,11 +154,11 @@ impl<'cfg> Source for GitSource<'cfg> {
             Some(&GitReference::Branch(ref s)) |
             Some(&GitReference::Tag(ref s)) |
             Some(&GitReference::Rev(ref s)) => s,
-            None => panic!("not a git source"),
+            None => panic!("not a mercurial source"),
         };
         let checkout_lock = format!(".cargo-lock-{}-{}", self.ident,
                                     reference_path);
-        let checkout_lock = try!(self.config.git_checkout_path()
+        let checkout_lock = try!(self.config.hg_checkout_path()
                                      .join(&self.ident)
                                      .open_rw(&checkout_lock, self.config,
                                               "the git checkout"));
